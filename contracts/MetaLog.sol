@@ -55,16 +55,16 @@ contract MetaLog {
         if (term_ == 1) {
             return ONE;
         } else if (term_ == 2) {
-            return (percentile_ / (ONE - percentile_)).ln();
+            // Beware Solidity rounding down, use logarithm quotient rule.
+            return percentile_.ln() - (ONE - percentile_).ln();
         } else if (term_ == 3) {
-            return (percentile_ - HALF) * (percentile_ / (ONE - percentile_)).ln();
+            return (percentile_ - HALF) * (percentile_.ln() - (ONE - percentile_).ln());
         } else if (term_ == 4) {
-            return (percentile_ - HALF);
-        // We can use bitwise operations for checking if number if even or add
+            return percentile_ - HALF;
         } else if (_isOdd(term_)) {
-            return (percentile_ - HALF).pow((percentile_ - 1) / 2);
+            return (percentile_ - HALF).pow((percentile_ - ONE) / 2);
         } else if (_isEven(term_)) {
-            return (percentile_ - HALF).pow((percentile_ - 1) / 2) * (percentile_ / (ONE - percentile_)).ln();
+            return (percentile_ - HALF).pow((percentile_ / 2) - ONE) * (percentile_.ln() - (ONE - percentile_).ln());
         }
     }
 
@@ -76,7 +76,7 @@ contract MetaLog {
      * @return quantile Quantile for provided parameters.
      */
     function getQuantile(uint256 percentile_, uint256[] calldata coefficients_, MetalogBoundParameters calldata bound_) external pure returns (uint256 quantile) {
-        require (percentile_ <= 1e18, "percentile_ > 100%");
+        require(percentile_ <= 1e18, "percentile_ > 100%");
         uint256 unboundedQuantile = 0;
 
         for (uint256 i = 0; i < coefficients_.length; i++) {

@@ -27,8 +27,6 @@ contract MetaLog {
         uint256 upperBound;
     }
 
-    constructor() {}
-
     /**
      * @notice Internal helper function to query whether given number is even, using bitwise operations.
      * @dev If the least significant bit is 0, then must be even number.
@@ -112,35 +110,35 @@ contract MetaLog {
         }
     }
 
+    // TO-DO: How to calculate quantile derivative for different bound choice.
     /**
      * @notice Derivative of quantile function (or quantile density function, or inverse of probability density function) for metalog probability distribution defined at https://en.wikipedia.org/wiki/Metalog_distribution#Definition_and_quantile_function
      * @param percentile_ Percentile that we desire to find the quantile derivative (1e18 => 100th percentile, 5e17 => 50th percentile)
      * @param coefficients_ Coefficients for metalog quantile function.
      * @param bound_ Metalog distribution bound choice.
-     * @return quantile Quantile for provided parameters.
+     * @return unboundedQuantileDerivative Quantile derivate for provided parameters.
      */
-    function _getQuantileDerivative(uint256 percentile_, uint256[] calldata coefficients_, MetalogBoundParameters calldata bound_) internal pure returns (uint256 quantile) {
+    function _getQuantileDerivative(uint256 percentile_, uint256[] calldata coefficients_, MetalogBoundParameters calldata bound_) internal pure returns (uint256 unboundedQuantileDerivative) {
         require(percentile_ <= 1e18, "percentile_ > 100%");
-        uint256 unboundedQuantile = 0;
         uint256 unboundedQuantileDerivative = 0;
 
         for (uint256 i = 0; i < coefficients_.length; i++) {
-            unboundedQuantile += coefficients_[i] * _getQuantileDerivativeFunctionTerm(percentile_, i + 1) / ONE;
+            unboundedQuantileDerivative += coefficients_[i] * _getQuantileDerivativeFunctionTerm(percentile_, i + 1) / ONE;
         }
 
         // Use transformations defined in https://en.wikipedia.org/wiki/Metalog_distribution#Unbounded,_semi-bounded,_and_bounded_metalog_distributions.
 
-        if (bound_.boundChoice == MetalogBoundChoice.UNBOUNDED) {
-            return unboundedQuantile;
-        } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED_BELOW) {
-            return (bound_.lowerBound + unboundedQuantile.exp());
-        } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED_ABOVE) {
-            return (bound_.upperBound - unboundedQuantile.exp().inv());
-        } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED) {
-            uint256 numerator = bound_.lowerBound + bound_.upperBound * unboundedQuantile.exp();
-            uint256 denominator = ONE + unboundedQuantile;
-            return numerator / denominator;
-        }
+        // if (bound_.boundChoice == MetalogBoundChoice.UNBOUNDED) {
+        //     return unboundedQuantile;
+        // } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED_BELOW) {
+        //     return (bound_.lowerBound + unboundedQuantile.exp());
+        // } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED_ABOVE) {
+        //     return (bound_.upperBound - unboundedQuantile.exp().inv());
+        // } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED) {
+        //     uint256 numerator = bound_.lowerBound + bound_.upperBound * unboundedQuantile.exp();
+        //     uint256 denominator = ONE + unboundedQuantile;
+        //     return numerator / denominator;
+        // }
     }
 
     /**

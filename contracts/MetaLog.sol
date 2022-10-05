@@ -191,7 +191,7 @@ contract MetaLog {
     ) internal pure returns (uint256 approximatePercentile) {
         approximatePercentile = startingPoint_;
         for (uint256 i = 0; i < iterations_; i++) {
-            approximatePercentile = approximatePercentile - _getQuantile(quantile_, coefficients_, bound_) / _getQuantile(quantile_, coefficients_, bound_);
+            approximatePercentile = approximatePercentile - _getQuantile(quantile_, coefficients_, bound_) / _getQuantileDerivative(quantile_, coefficients_, bound_);
         }
     }
 }

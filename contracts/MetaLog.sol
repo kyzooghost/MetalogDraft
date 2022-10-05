@@ -1,3 +1,6 @@
+// TO-DO Test with dummy data
+// TO-DO Clarify role of Newton-Raphson in Metalog context
+
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.6;
 

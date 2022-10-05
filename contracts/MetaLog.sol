@@ -30,6 +30,7 @@ contract MetaLog {
     /**
      * @notice Internal helper function to query whether given number is even, using bitwise operations.
      * @dev If the least significant bit is 0, then must be even number.
+     * @dev Quick test in Remix shows that this implementation costs 27 gas, vs `return (x % 2 == 0)` which costs 202 gas.
      * @param x Number we are querying for.
      * @param isEven True is even, false if odd.
      */

@@ -1,5 +1,6 @@
 // TO-DO Test with dummy data
-// TO-DO Clarify role of Newton-Raphson in Metalog context
+// TO-DO Test PRBMathUD60x18 library
+// TO-DO Compare with Python implementation in https://github.com/kimsergeo/metalog/tree/master/metalog
 
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.6;
@@ -10,6 +11,10 @@ import "@prb/math/contracts/PRBMathUD60x18.sol";
 
 contract MetaLog {
     using PRBMathUD60x18 for uint256;
+
+    /***************************************
+    GLOBAL PUBLIC AND DATA STRUCTURES
+    ***************************************/
 
     uint256 constant internal HALF = 5e17;
     uint256 constant internal ONE = 1e18;
@@ -26,6 +31,25 @@ contract MetaLog {
         uint256 lowerBound;
         uint256 upperBound;
     }
+
+    /****************************************
+    EXTERNAL VIEW FUNCTIONS
+    ****************************************/
+
+    /**
+     * @notice Quantile function for metalog probability distribution defined at https://en.wikipedia.org/wiki/Metalog_distribution#Definition_and_quantile_function
+     * @param percentile_ Percentile that we desire to find the quantile (1e18 => 100th percentile, 5e17 => 50th percentile)
+     * @param coefficients_ Coefficients for metalog quantile function, to 18 decimal places.
+     * @param bound_ Metalog distribution bound choice.
+     * @return quantile Quantile for provided parameters.
+     */
+    function getQuantile(uint256 percentile_, uint256[] calldata coefficients_, MetalogBoundParameters calldata bound_) external pure returns (uint256 quantile) {
+        return _getQuantile(percentile_, coefficients_, bound_);
+    }
+
+    /****************************************
+    INTERNAL HELPER FUNCTIONS
+    ****************************************/
 
     /**
      * @notice Internal helper function to query whether given number is even, using bitwise operations.
@@ -47,6 +71,10 @@ contract MetaLog {
     function _isOdd(uint256 x) internal pure returns (bool isOdd) {
         return (x & 1 == 1);
     }
+
+    /******************************************
+    INTERNAL METALOG QUANTILE HELPER FUNCTIONS
+    ******************************************/
 
     /**
      * @notice Internal helper function to obtain individual terms for metalog quantile function.
@@ -73,18 +101,7 @@ contract MetaLog {
     /**
      * @notice Quantile function for metalog probability distribution defined at https://en.wikipedia.org/wiki/Metalog_distribution#Definition_and_quantile_function
      * @param percentile_ Percentile that we desire to find the quantile (1e18 => 100th percentile, 5e17 => 50th percentile)
-     * @param coefficients_ Coefficients for metalog quantile function.
-     * @param bound_ Metalog distribution bound choice.
-     * @return quantile Quantile for provided parameters.
-     */
-    function getQuantile(uint256 percentile_, uint256[] calldata coefficients_, MetalogBoundParameters calldata bound_) external pure returns (uint256 quantile) {
-        return _getQuantile(percentile_, coefficients_, bound_);
-    }
-
-    /**
-     * @notice Quantile function for metalog probability distribution defined at https://en.wikipedia.org/wiki/Metalog_distribution#Definition_and_quantile_function
-     * @param percentile_ Percentile that we desire to find the quantile (1e18 => 100th percentile, 5e17 => 50th percentile)
-     * @param coefficients_ Coefficients for metalog quantile function.
+     * @param coefficients_ Coefficients for metalog quantile function, to 18 decimal places.
      * @param bound_ Metalog distribution bound choice.
      * @return quantile Quantile for provided parameters.
      */
@@ -106,8 +123,40 @@ contract MetaLog {
             return (bound_.upperBound - unboundedQuantile.exp().inv());
         } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED) {
             uint256 numerator = bound_.lowerBound + bound_.upperBound * unboundedQuantile.exp();
-            uint256 denominator = ONE + unboundedQuantile;
+            uint256 denominator = ONE + unboundedQuantile.exp();
             return numerator / denominator;
+        }
+    }
+
+    /**************************************************
+    INTERNAL INVERSE METALOG QUANTILE HELPER FUNCTIONS
+    **************************************************/
+
+    // FIX-ME: Is there an efficient way to get the starting point other than a blind guess? Like there is with Babylonian method for square roots.
+    /**
+     * @notice Internal helper function to obtain individual terms for the derivative of the metalog quantile function.
+     * @dev Using Newton-Raphson method.
+     * @param quantile_ Quantile to find cumulative probability for.
+     * @param coefficients_ Coefficients for metalog quantile function.
+     * @param bound_ Metalog distribution bound choice.
+     * @param iterations_ Number of iterations of Newton-Raphson approximation method.
+     * @param startingPoint_ Starting point for Newton-Raphson approximation.
+     * @return approximatePercentile Approximate cumulative probability for quantile.
+     */
+    function _getApproximatePercentile(
+        uint256 quantile_, 
+        uint256[] calldata coefficients_, 
+        MetalogBoundParameters calldata bound_, 
+        uint256 iterations_, 
+        uint256 startingPoint_
+    ) internal pure returns (uint256 approximatePercentile) {
+        require(startingPoint_ <= 1e18, "startingPoint_ > 100%");
+
+        approximatePercentile = startingPoint_;
+        for (uint256 i = 0; i < iterations_; i++) {
+            approximatePercentile = approximatePercentile 
+            - (_getQuantile(approximatePercentile, coefficients_, bound_) - quantile_)
+            / _getQuantileDerivative(approximatePercentile, coefficients_, bound_);
         }
     }
 
@@ -119,13 +168,19 @@ contract MetaLog {
      * @param bound_ Metalog distribution bound choice.
      * @return unboundedQuantileDerivative Quantile derivate for provided parameters.
      */
-    function _getQuantileDerivative(uint256 percentile_, uint256[] calldata coefficients_, MetalogBoundParameters calldata bound_) internal pure returns (uint256 unboundedQuantileDerivative) {
+    function _getQuantileDerivative(
+        uint256 percentile_, 
+        uint256[] calldata coefficients_, 
+        MetalogBoundParameters calldata bound_
+    ) internal pure returns (uint256 unboundedQuantileDerivative) {
         require(percentile_ <= 1e18, "percentile_ > 100%");
-        uint256 unboundedQuantileDerivative = 0;
+        unboundedQuantileDerivative = 0;
 
         for (uint256 i = 0; i < coefficients_.length; i++) {
             unboundedQuantileDerivative += coefficients_[i] * _getQuantileDerivativeFunctionTerm(percentile_, i + 1) / ONE;
         }
+
+        return unboundedQuantileDerivative;
 
         // Use transformations defined in https://en.wikipedia.org/wiki/Metalog_distribution#Unbounded,_semi-bounded,_and_bounded_metalog_distributions.
 
@@ -155,44 +210,22 @@ contract MetaLog {
             // Beware Solidity rounding down, use logarithm quotient rule.
             return (percentile_ * (ONE - percentile_)).inv();
         } else if (term_ == 3) {
-            return percentile_.ln() - (ONE - percentile_).ln() + (percentile_ - HALF) * (percentile_ * (ONE - percentile_)).inv();
+            return percentile_.ln() 
+            - (ONE - percentile_).ln() 
+            + (percentile_ - HALF) * (percentile_ * (ONE - percentile_)).inv();
         } else if (term_ == 4) {
             return ONE;
         } else if (_isOdd(term_)) {
-            return (ONE * (term_ - 1) / 2) * (percentile_ - HALF).pow(ONE * (term_ - 3) / 2);
+            return (ONE * (term_ - 1) / 2) 
+            * (percentile_ - HALF).pow(ONE * (term_ - 3) / 2);
         } else if (_isEven(term_)) {
             return (((term_ * ONE) / 2) - ONE)
                 * (percentile_ - HALF).pow(((term_ * ONE) / 2) - 2 * ONE)
                 * (percentile_.ln() - (ONE - percentile_).ln())
                 + (
-                    (ONE - percentile_) 
-                    * (percentile_ - HALF).pow(((term_ * ONE) / 2) - ONE)
-                    * (ONE - percentile_).pow(2 * ONE).inv()
-                    / percentile_
+                    (percentile_ * (ONE - percentile_)).inv()
+                    * (percentile_ - HALF).pow(ONE * (term_ / 2) - ONE)
                 );
-        }
-    }
-
-    /**
-     * @notice Internal helper function to obtain individual terms for the derivative of the metalog quantile function.
-     * @dev Using Newton-Raphson method.
-     * @param quantile_ Quantile to find cumulative probability for.
-     * @param coefficients_ Coefficients for metalog quantile function.
-     * @param bound_ Metalog distribution bound choice.
-     * @param iterations_ Number of iterations of Newton-Raphson approximation method.
-     * @param startingPoint_ Starting point for Newton-Raphson approximation.
-     * @return approximatePercentile Approximate cumulative probability for quantile.
-     */
-    function _getApproximatePercentile(
-        uint256 quantile_, 
-        uint256[] calldata coefficients_, 
-        MetalogBoundParameters calldata bound_, 
-        uint256 iterations_, 
-        uint256 startingPoint_
-    ) internal pure returns (uint256 approximatePercentile) {
-        approximatePercentile = startingPoint_;
-        for (uint256 i = 0; i < iterations_; i++) {
-            approximatePercentile = approximatePercentile - _getQuantile(quantile_, coefficients_, bound_) / _getQuantileDerivative(quantile_, coefficients_, bound_);
         }
     }
 }

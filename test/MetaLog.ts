@@ -37,7 +37,9 @@ describe('MetaLog', function () {
       expect(await test.mul(ONE, ONE)).eq(ONE);
       expect(await test.mul(ONE, TWO)).eq(TWO);
       expect(await test.mul(ONE, HALF)).eq(HALF);
-      expect(await test.mul(FOUR, -HALF)).eq(TWO);
+      expect(await test.mul(FOUR, HALF)).eq(TWO);
+      expect(await test.mul(ONE, ONE.mul(-1))).eq(ONE.mul(-1));
+      expect(await test.mul(ONE.mul(-1), ONE.mul(-1))).eq(ONE);
     });
 
     it('div', async function () {
@@ -45,18 +47,23 @@ describe('MetaLog', function () {
       expect(await test.div(ONE, TWO)).eq(HALF);
       expect(await test.div(TWO, ONE)).eq(TWO);
       expect(await test.div(FOUR, HALF)).eq(EIGHT);
+      expect(await test.div(ONE, ONE.mul(-1))).eq(ONE.mul(-1));
+      expect(await test.div(ONE.mul(-1), ONE.mul(-1))).eq(ONE);
     });
 
     it('inv', async function () {
       expect(await test.inv(ONE)).eq(ONE);
       expect(await test.inv(TWO)).eq(HALF);
       expect(await test.inv(HALF)).eq(TWO);
+      expect(await test.inv(ONE.mul(-1))).eq(ONE.mul(-1));
     });
 
     it('exp', async function () {
       expectWithinErrorBPS(await test.exp(ONE), e, 1);
       expectWithinErrorBPS(await test.exp(TWO), e.pow(2).div(SCALE), 1);
       expectWithinErrorBPS(await test.exp(FOUR), e.pow(4).div(SCALE).div(SCALE).div(SCALE), 1);
+      expectWithinErrorBPS(await test.exp(ONE.mul(-1)), ONE.mul(ONE).div(e), 1);
+
     });
 
     it('ln', async function () {
@@ -70,6 +77,8 @@ describe('MetaLog', function () {
       expect(await test.pow(ONE, EIGHT)).eq(ONE);
       expect(await test.pow(TWO, TWO)).eq(FOUR);
       expect(await test.pow(TWO, THREE)).eq(EIGHT);
+      expect(await test.pow(TWO, ONE.mul(-1))).eq(await test.inv(TWO));
+      expect(await test.pow(TWO, TWO.mul(-1))).eq(await test.mul(HALF, HALF));
     });
   });
 

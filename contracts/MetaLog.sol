@@ -1,5 +1,4 @@
 // TO-DO Test with dummy data
-// TO-DO Test PRBMathUD60x18 library
 // TO-DO Compare with Python implementation in https://github.com/kimsergeo/metalog/tree/master/metalog
 
 // SPDX-License-Identifier: UNLICENSED
@@ -10,6 +9,7 @@ import "@prb/math/contracts/PRBMathSD59x18.sol";
 
 contract MetaLog {
     // @dev We need to ensure all numbers are to 18 decimals places, to conform with 59.18 fixed point maths library.
+    // @dev Ensure we don't use native * and / operators in Solidity, but library mul() and div() operations.
     using PRBMathSD59x18 for int256;
 
     /***************************************
@@ -18,6 +18,8 @@ contract MetaLog {
 
     int256 constant internal HALF = 5e17;
     int256 constant internal ONE = 1e18;
+    int256 constant internal TWO = 2e18;
+    int256 constant internal THREE = 3e18;
 
     enum MetalogBoundChoice {
         UNBOUNDED,
@@ -88,13 +90,15 @@ contract MetaLog {
             // Beware Solidity rounding down, use logarithm quotient rule.
             return percentile_.ln() - (ONE - percentile_).ln();
         } else if (term_ == 3) {
-            return (percentile_ - HALF) * (percentile_.ln() - (ONE - percentile_).ln());
+            return (percentile_ - HALF)
+            .mul((percentile_.ln() - (ONE - percentile_).ln()));
         } else if (term_ == 4) {
             return percentile_ - HALF;
         } else if (_isOdd(term_)) {
-            return (percentile_ - HALF).pow(ONE * (term_ - 1) / 2);
+            return (percentile_ - HALF).pow((term_.fromInt() - ONE).div(TWO));
         } else if (_isEven(term_)) {
-            return (percentile_ - HALF).pow((ONE * term_ / 2) - ONE) * (percentile_.ln() - (ONE - percentile_).ln());
+            return (percentile_ - HALF).pow(term_.fromInt().div(TWO) - ONE)
+            .mul((percentile_.ln() - (ONE - percentile_).ln()));
         }
     }
 
@@ -110,7 +114,7 @@ contract MetaLog {
         int256 unboundedQuantile = 0;
 
         for (uint256 i = 0; i < coefficients_.length; i++) {
-            unboundedQuantile += coefficients_[i] * _getQuantileFunctionTerm(percentile_, int256(i) + 1) / ONE;
+            unboundedQuantile += coefficients_[i].mul(_getQuantileFunctionTerm(percentile_, int256(i) + 1));
         }
 
         // Use transformations defined in https://en.wikipedia.org/wiki/Metalog_distribution#Unbounded,_semi-bounded,_and_bounded_metalog_distributions.
@@ -122,9 +126,9 @@ contract MetaLog {
         } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED_ABOVE) {
             return (bound_.upperBound - unboundedQuantile.exp().inv());
         } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED) {
-            int256 numerator = bound_.lowerBound + bound_.upperBound * unboundedQuantile.exp();
+            int256 numerator = bound_.lowerBound + bound_.upperBound.mul(unboundedQuantile.exp());
             int256 denominator = ONE + unboundedQuantile.exp();
-            return numerator / denominator;
+            return numerator.div(denominator);
         }
     }
 
@@ -156,7 +160,7 @@ contract MetaLog {
         for (int256 i = 0; i < iterations_; i++) {
             approximatePercentile = approximatePercentile 
             - (_getQuantile(approximatePercentile, coefficients_, bound_) - quantile_)
-            / _getQuantileDerivative(approximatePercentile, coefficients_, bound_);
+            .div(_getQuantileDerivative(approximatePercentile, coefficients_, bound_));
         }
     }
 
@@ -177,7 +181,7 @@ contract MetaLog {
         unboundedQuantileDerivative = 0;
 
         for (uint256 i = 0; i < coefficients_.length; i++) {
-            unboundedQuantileDerivative += coefficients_[i] * _getQuantileDerivativeFunctionTerm(percentile_, int256(i) + 1) / ONE;
+            unboundedQuantileDerivative += coefficients_[i].mul(_getQuantileDerivativeFunctionTerm(percentile_, int256(i) + 1));
         }
 
         return unboundedQuantileDerivative;
@@ -208,23 +212,23 @@ contract MetaLog {
             return 0;
         } else if (term_ == 2) {
             // Beware Solidity rounding down, use logarithm quotient rule.
-            return (percentile_ * (ONE - percentile_)).inv();
+            return (percentile_.mul((ONE - percentile_))).inv();
         } else if (term_ == 3) {
             return percentile_.ln() 
             - (ONE - percentile_).ln() 
-            + (percentile_ - HALF) * (percentile_ * (ONE - percentile_)).inv();
+            + (percentile_ - HALF).div(percentile_.mul((ONE - percentile_)));
         } else if (term_ == 4) {
             return ONE;
         } else if (_isOdd(term_)) {
-            return (ONE * (term_ - 1) / 2) 
-            * (percentile_ - HALF).pow(ONE * (term_ - 3) / 2);
+            return ((term_.fromInt() - ONE).div(TWO)) 
+            .mul((percentile_ - HALF).pow((term_.fromInt() - THREE).div(TWO)));
         } else if (_isEven(term_)) {
-            return (((term_ * ONE) / 2) - ONE)
-                * (percentile_ - HALF).pow(((term_ * ONE) / 2) - 2 * ONE)
-                * (percentile_.ln() - (ONE - percentile_).ln())
+            return (term_.fromInt().div(TWO) - ONE)
+                .mul((percentile_ - HALF).pow(term_.fromInt().div(TWO) - TWO))
+                .mul((percentile_.ln() - (ONE - percentile_).ln()))
                 + (
-                    (percentile_ * (ONE - percentile_)).inv()
-                    * (percentile_ - HALF).pow(ONE * (term_ / 2) - ONE)
+                    (percentile_ - HALF).pow(term_.fromInt().div(TWO) - ONE)
+                    .div(percentile_.mul(ONE - percentile_))
                 );
         }
     }

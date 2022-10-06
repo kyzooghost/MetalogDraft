@@ -128,7 +128,7 @@ contract MetaLog {
         } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED) {
             int256 numerator = bound_.lowerBound + bound_.upperBound.mul(unboundedQuantile.exp());
             int256 denominator = ONE + unboundedQuantile.exp();
-            return numerator.div(denominator);
+            return unboundedQuantile.mul(numerator.div(denominator));
         }
     }
 
@@ -158,9 +158,11 @@ contract MetaLog {
 
         approximatePercentile = startingPoint_;
         for (int256 i = 0; i < iterations_; i++) {
+            int256 getQuantileResult = _getQuantile(approximatePercentile, coefficients_, bound_);
+
             approximatePercentile = approximatePercentile 
-            - (_getQuantile(approximatePercentile, coefficients_, bound_) - quantile_)
-            .div(_getQuantileDerivative(approximatePercentile, coefficients_, bound_));
+            - (getQuantileResult - quantile_)
+            .div(_getQuantileDerivative(approximatePercentile, coefficients_, bound_, getQuantileResult));
         }
     }
 
@@ -170,12 +172,14 @@ contract MetaLog {
      * @param percentile_ Percentile that we desire to find the quantile derivative (1e18 => 100th percentile, 5e17 => 50th percentile)
      * @param coefficients_ Coefficients for metalog quantile function.
      * @param bound_ Metalog distribution bound choice.
+     * @param quantileResult_ Result of evaluation metalog quantile function for same percentile_ value, provided as parameter to avoid repeating duplicate computation in Newton-Raphson approximation method.
      * @return unboundedQuantileDerivative Quantile derivate for provided parameters.
      */
     function _getQuantileDerivative(
         int256 percentile_, 
         int256[] calldata coefficients_, 
-        MetalogBoundParameters calldata bound_
+        MetalogBoundParameters calldata bound_,
+        int256 quantileResult_
     ) internal pure returns (int256 unboundedQuantileDerivative) {
         require(percentile_ <= 1e18, "percentile_ > 100%");
         unboundedQuantileDerivative = 0;
@@ -184,21 +188,19 @@ contract MetaLog {
             unboundedQuantileDerivative += coefficients_[i].mul(_getQuantileDerivativeFunctionTerm(percentile_, int256(i) + 1));
         }
 
-        return unboundedQuantileDerivative;
-
         // Use transformations defined in https://en.wikipedia.org/wiki/Metalog_distribution#Unbounded,_semi-bounded,_and_bounded_metalog_distributions.
 
-        // if (bound_.boundChoice == MetalogBoundChoice.UNBOUNDED) {
-        //     return unboundedQuantile;
-        // } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED_BELOW) {
-        //     return (bound_.lowerBound + unboundedQuantile.exp());
-        // } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED_ABOVE) {
-        //     return (bound_.upperBound - unboundedQuantile.exp().inv());
-        // } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED) {
-        //     int256 numerator = bound_.lowerBound + bound_.upperBound * unboundedQuantile.exp();
-        //     int256 denominator = ONE + unboundedQuantile;
-        //     return numerator / denominator;
-        // }
+        if (bound_.boundChoice == MetalogBoundChoice.UNBOUNDED) {
+            return unboundedQuantileDerivative;
+        } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED_BELOW) {
+            return unboundedQuantileDerivative.mul(quantileResult_.exp());
+        } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED_ABOVE) {
+            return unboundedQuantileDerivative.div(quantileResult_.exp());
+        } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED) {
+            int256 numerator = (bound_.upperBound - bound_.lowerBound).mul(quantileResult_.exp());
+            int256 denominator = (ONE + quantileResult_.exp()).pow(TWO);
+            return unboundedQuantileDerivative.mul(numerator).div(denominator);
+        }
     }
 
     /**

@@ -22,8 +22,6 @@ describe('MetaLog', function () {
   const e: BN = BN.from('2718281828459045235');
   const SCALE_FACTOR = ONE;
 
-  2.7182818284;
-
   before(async () => {
     const [owner, otherAccount] = await ethers.getSigners();
     const MetaLog = await ethers.getContractFactory('MetaLog');

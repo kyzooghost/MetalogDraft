@@ -5,19 +5,19 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.6;
 
-// Uncomment this line to use console.log
 import "hardhat/console.sol";
-import "@prb/math/contracts/PRBMathUD60x18.sol";
+import "@prb/math/contracts/PRBMathSD59x18.sol";
 
 contract MetaLog {
-    using PRBMathUD60x18 for uint256;
+    // @dev We need to ensure all numbers are to 18 decimals places, to conform with 59.18 fixed point maths library.
+    using PRBMathSD59x18 for int256;
 
     /***************************************
     GLOBAL PUBLIC AND DATA STRUCTURES
     ***************************************/
 
-    uint256 constant internal HALF = 5e17;
-    uint256 constant internal ONE = 1e18;
+    int256 constant internal HALF = 5e17;
+    int256 constant internal ONE = 1e18;
 
     enum MetalogBoundChoice {
         UNBOUNDED,
@@ -28,8 +28,8 @@ contract MetaLog {
 
     struct MetalogBoundParameters {
         MetalogBoundChoice boundChoice;
-        uint256 lowerBound;
-        uint256 upperBound;
+        int256 lowerBound;
+        int256 upperBound;
     }
 
     /****************************************
@@ -43,7 +43,7 @@ contract MetaLog {
      * @param bound_ Metalog distribution bound choice.
      * @return quantile Quantile for provided parameters.
      */
-    function getQuantile(uint256 percentile_, uint256[] calldata coefficients_, MetalogBoundParameters calldata bound_) external pure returns (uint256 quantile) {
+    function getQuantile(int256 percentile_, int256[] calldata coefficients_, MetalogBoundParameters calldata bound_) external pure returns (int256 quantile) {
         return _getQuantile(percentile_, coefficients_, bound_);
     }
 
@@ -58,7 +58,7 @@ contract MetaLog {
      * @param x Number we are querying for.
      * @param isEven True is even, false if odd.
      */
-    function _isEven(uint256 x) internal pure returns (bool isEven) {
+    function _isEven(int256 x) internal pure returns (bool isEven) {
         return (x & 1 == 0);
     }
 
@@ -68,7 +68,7 @@ contract MetaLog {
      * @param x Number we are querying for.
      * @param isOdd True is odd, false if even.
      */
-    function _isOdd(uint256 x) internal pure returns (bool isOdd) {
+    function _isOdd(int256 x) internal pure returns (bool isOdd) {
         return (x & 1 == 1);
     }
 
@@ -81,7 +81,7 @@ contract MetaLog {
      * @param percentile_ Percentile that we desire to find the quantile (1e18 => 100th percentile, 5e17 => 50th percentile)
      * @param term_ Which term we want to find, i.e. `term_ == 1` means we want to find the first term.
      */
-    function _getQuantileFunctionTerm(uint256 percentile_, uint256 term_) internal pure returns (uint256 term) {
+    function _getQuantileFunctionTerm(int256 percentile_, int256 term_) internal pure returns (int256 term) {
         if (term_ == 1) {
             return ONE;
         } else if (term_ == 2) {
@@ -105,12 +105,12 @@ contract MetaLog {
      * @param bound_ Metalog distribution bound choice.
      * @return quantile Quantile for provided parameters.
      */
-    function _getQuantile(uint256 percentile_, uint256[] calldata coefficients_, MetalogBoundParameters calldata bound_) internal pure returns (uint256 quantile) {
+    function _getQuantile(int256 percentile_, int256[] calldata coefficients_, MetalogBoundParameters calldata bound_) internal pure returns (int256 quantile) {
         require(percentile_ <= 1e18, "percentile_ > 100%");
-        uint256 unboundedQuantile = 0;
+        int256 unboundedQuantile = 0;
 
         for (uint256 i = 0; i < coefficients_.length; i++) {
-            unboundedQuantile += coefficients_[i] * _getQuantileFunctionTerm(percentile_, i + 1) / ONE;
+            unboundedQuantile += coefficients_[i] * _getQuantileFunctionTerm(percentile_, int256(i) + 1) / ONE;
         }
 
         // Use transformations defined in https://en.wikipedia.org/wiki/Metalog_distribution#Unbounded,_semi-bounded,_and_bounded_metalog_distributions.
@@ -122,8 +122,8 @@ contract MetaLog {
         } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED_ABOVE) {
             return (bound_.upperBound - unboundedQuantile.exp().inv());
         } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED) {
-            uint256 numerator = bound_.lowerBound + bound_.upperBound * unboundedQuantile.exp();
-            uint256 denominator = ONE + unboundedQuantile.exp();
+            int256 numerator = bound_.lowerBound + bound_.upperBound * unboundedQuantile.exp();
+            int256 denominator = ONE + unboundedQuantile.exp();
             return numerator / denominator;
         }
     }
@@ -144,16 +144,16 @@ contract MetaLog {
      * @return approximatePercentile Approximate cumulative probability for quantile.
      */
     function _getApproximatePercentile(
-        uint256 quantile_, 
-        uint256[] calldata coefficients_, 
+        int256 quantile_, 
+        int256[] calldata coefficients_, 
         MetalogBoundParameters calldata bound_, 
-        uint256 iterations_, 
-        uint256 startingPoint_
-    ) internal pure returns (uint256 approximatePercentile) {
+        int256 iterations_, 
+        int256 startingPoint_
+    ) internal pure returns (int256 approximatePercentile) {
         require(startingPoint_ <= 1e18, "startingPoint_ > 100%");
 
         approximatePercentile = startingPoint_;
-        for (uint256 i = 0; i < iterations_; i++) {
+        for (int256 i = 0; i < iterations_; i++) {
             approximatePercentile = approximatePercentile 
             - (_getQuantile(approximatePercentile, coefficients_, bound_) - quantile_)
             / _getQuantileDerivative(approximatePercentile, coefficients_, bound_);
@@ -169,15 +169,15 @@ contract MetaLog {
      * @return unboundedQuantileDerivative Quantile derivate for provided parameters.
      */
     function _getQuantileDerivative(
-        uint256 percentile_, 
-        uint256[] calldata coefficients_, 
+        int256 percentile_, 
+        int256[] calldata coefficients_, 
         MetalogBoundParameters calldata bound_
-    ) internal pure returns (uint256 unboundedQuantileDerivative) {
+    ) internal pure returns (int256 unboundedQuantileDerivative) {
         require(percentile_ <= 1e18, "percentile_ > 100%");
         unboundedQuantileDerivative = 0;
 
         for (uint256 i = 0; i < coefficients_.length; i++) {
-            unboundedQuantileDerivative += coefficients_[i] * _getQuantileDerivativeFunctionTerm(percentile_, i + 1) / ONE;
+            unboundedQuantileDerivative += coefficients_[i] * _getQuantileDerivativeFunctionTerm(percentile_, int256(i) + 1) / ONE;
         }
 
         return unboundedQuantileDerivative;
@@ -191,8 +191,8 @@ contract MetaLog {
         // } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED_ABOVE) {
         //     return (bound_.upperBound - unboundedQuantile.exp().inv());
         // } else if (bound_.boundChoice == MetalogBoundChoice.BOUNDED) {
-        //     uint256 numerator = bound_.lowerBound + bound_.upperBound * unboundedQuantile.exp();
-        //     uint256 denominator = ONE + unboundedQuantile;
+        //     int256 numerator = bound_.lowerBound + bound_.upperBound * unboundedQuantile.exp();
+        //     int256 denominator = ONE + unboundedQuantile;
         //     return numerator / denominator;
         // }
     }
@@ -203,7 +203,7 @@ contract MetaLog {
      * @param percentile_ Percentile that we desire to find the quantile (1e18 => 100th percentile, 5e17 => 50th percentile)
      * @param term_ Which term we want to find, i.e. `term_ == 1` means we want to find the first term.
      */
-    function _getQuantileDerivativeFunctionTerm(uint256 percentile_, uint256 term_) internal pure returns (uint256 term) {
+    function _getQuantileDerivativeFunctionTerm(int256 percentile_, int256 term_) internal pure returns (int256 term) {
         if (term_ == 1) {
             return 0;
         } else if (term_ == 2) {

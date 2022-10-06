@@ -1,4 +1,4 @@
-// TO-DO Test with dummy data
+// TO-DO Test getApproximatePercentile function
 // TO-DO Compare with Python implementation in https://github.com/kimsergeo/metalog/tree/master/metalog
 
 // SPDX-License-Identifier: UNLICENSED
@@ -55,8 +55,6 @@ contract MetaLog {
      * @param quantile_ Quantile to find cumulative probability for.
      * @param coefficients_ Coefficients for metalog quantile function.
      * @param bound_ Metalog distribution bound choice.
-     * @param iterations_ Number of iterations of Newton-Raphson approximation method.
-     * @param startingPoint_ Starting point for Newton-Raphson approximation.
      * @return approximatePercentile Approximate cumulative probability for quantile.
      */
     function getApproximatePercentile(
@@ -67,7 +65,7 @@ contract MetaLog {
         int256 startingPoint_
     ) external view returns (int256 approximatePercentile) {
         require(startingPoint_ <= 1e18, "startingPoint_ > 100%");
-        return _getApproximatePercentile(quantile_, coefficients_, bound_, iterations_, startingPoint_);
+        return _getApproximatePercentile(quantile_, coefficients_, bound_);
     }
 
     /****************************************
@@ -164,36 +162,44 @@ contract MetaLog {
     **************************************************/
 
     // FIX-ME: Is there an efficient way to get the starting point other than a blind guess? Like there is with Babylonian method for square roots.
+    // FIX-ME: Do quantile functions have an inflection point?
     /**
      * @notice Internal helper function to obtain individual terms for the derivative of the metalog quantile function.
-     * @dev Using Newton-Raphson method.
+     * @dev Using Newton-Raphson method. Appropriate because the quantile function is a monotonically increasing function for a continuous probability distribution
      * @param quantile_ Quantile to find cumulative probability for.
      * @param coefficients_ Coefficients for metalog quantile function.
      * @param bound_ Metalog distribution bound choice.
-     * @param iterations_ Number of iterations of Newton-Raphson approximation method.
-     * @param startingPoint_ Starting point for Newton-Raphson approximation.
      * @return approximatePercentile Approximate cumulative probability for quantile.
      */
     function _getApproximatePercentile(
         int256 quantile_, 
         int256[] calldata coefficients_, 
-        MetalogBoundParameters calldata bound_, 
-        int256 iterations_, 
-        int256 startingPoint_
+        MetalogBoundParameters calldata bound_
     ) internal view returns (int256 approximatePercentile) {
-        require(startingPoint_ <= 1e18, "startingPoint_ > 100%");
+        int256 accepted_error = 10e11;
+        int256 current_error;
+        int256 loop_count = 0;
 
-        approximatePercentile = startingPoint_;
-        for (int256 i = 0; i < iterations_; i++) {
+        // Start at 50% percentile
+        approximatePercentile = 5e17; 
+
+        while (current_error > accepted_error && loop_count < 1000) {
             int256 getQuantileResult = _getQuantile(approximatePercentile, coefficients_, bound_);
 
-            approximatePercentile = approximatePercentile 
+            int newApproximatePercentile = approximatePercentile 
             - (getQuantileResult - quantile_)
             .div(_getQuantileDerivative(approximatePercentile, coefficients_, bound_, getQuantileResult));
+
+            current_error = (newApproximatePercentile - approximatePercentile).abs();
+            approximatePercentile = newApproximatePercentile;
+            loop_count += 1;
+        }
+
+        if (loop_count >= 100) {
+            revert('Unable to find approximate percentile');
         }
     }
 
-    // TO-DO: How to calculate quantile derivative for different bound choice.
     /**
      * @notice Derivative of quantile function (or quantile density function, or inverse of probability density function) for metalog probability distribution defined at https://en.wikipedia.org/wiki/Metalog_distribution#Definition_and_quantile_function
      * @param percentile_ Percentile that we desire to find the quantile derivative (1e18 => 100th percentile, 5e17 => 50th percentile)
@@ -249,15 +255,30 @@ contract MetaLog {
         } else if (term_ == 4) {
             return ONE;
         } else if (_isOdd(term_)) {
-            return ((term_.fromInt() - ONE).div(TWO)) 
-            .mul((percentile_ - HALF).abs().pow((term_.fromInt() - THREE).div(TWO)));
+            int256 exponent = (term_.fromInt() - THREE).div(TWO);
+            int256 sign = percentile_ > HALF || _isEven(exponent.toInt()) ? ONE : -ONE;
+
+            return ((term_.fromInt() - ONE).div(TWO))
+            .mul((percentile_ - HALF).abs().pow(exponent))
+            .mul(sign);
         } else if (_isEven(term_)) {
+            int256 exponent1 = term_.fromInt().div(TWO) - TWO;
+            int256 exponent2 = term_.fromInt().div(TWO) - ONE;
+
+            // Unable to define `sign1` and `sign2` due to stack-too-deep issue.
+            // int256 sign1 = percentile_ > HALF || _isEven(exponent1.toInt()) ? ONE : -ONE;
+            // int256 sign2 = percentile_ > HALF || _isEven(exponent2.toInt()) ? ONE : -ONE;
+
             return (term_.fromInt().div(TWO) - ONE)
-                .mul((percentile_ - HALF).abs().pow(term_.fromInt().div(TWO) - TWO))
+                .mul((percentile_ - HALF).abs().pow(exponent1))
                 .mul((percentile_.ln() - (ONE - percentile_).ln()))
+                // mul.sign(1)
+                .mul(percentile_ > HALF || _isEven(exponent1.toInt()) ? ONE : -ONE)
                 + (
-                    (percentile_ - HALF).abs().pow(term_.fromInt().div(TWO) - ONE)
+                    (percentile_ - HALF).abs().pow(exponent2)
                     .div(percentile_.mul(ONE - percentile_))
+                    // mul.sign(2)
+                    .mul(percentile_ > HALF || _isEven(exponent2.toInt()) ? ONE : -ONE)
                 );
         }
     }

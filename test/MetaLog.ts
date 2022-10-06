@@ -19,8 +19,22 @@ describe('MetaLog', function () {
   const THREE: BN = BN.from('10').pow(18).mul(3);
   const FOUR: BN = BN.from('10').pow(18).mul(4);
   const EIGHT: BN = BN.from('10').pow(18).mul(8);
+  const TEN: BN = BN.from('10').pow(18).mul(10);
   const e: BN = BN.from('2718281828459045235');
   const SCALE_FACTOR = ONE;
+
+  enum MetalogBoundChoice {
+    UNBOUNDED,
+    BOUNDED_BELOW,
+    BOUNDED_ABOVE,
+    BOUNDED
+  }
+
+  interface MetalogBoundParameters {
+    boundChoice: MetalogBoundChoice;
+    lowerBound: BN;
+    upperBound: BN;
+  }
 
   before(async () => {
     const [owner, otherAccount] = await ethers.getSigners();
@@ -61,7 +75,6 @@ describe('MetaLog', function () {
       expectWithinErrorBPS(await test.exp(TWO), e.pow(2).div(SCALE), 1);
       expectWithinErrorBPS(await test.exp(FOUR), e.pow(4).div(SCALE).div(SCALE).div(SCALE), 1);
       expectWithinErrorBPS(await test.exp(ONE.mul(-1)), ONE.mul(ONE).div(e), 1);
-
     });
 
     it('ln', async function () {
@@ -80,77 +93,86 @@ describe('MetaLog', function () {
     });
   });
 
-  describe('Nine-term metalog ', function () {
-    // it("Should set the right unlockTime", async function () {
-    // console.log("Hello");
-    // });
+  describe('Nine-term unbounded metalog quantile function', function () {
+    const COEFFICIENTS: BN[] = [
+      BN.from("996043875471054000"),
+      BN.from("051024209692504000"),
+      BN.from("040340911286869100").mul(-1),
+      BN.from("181985469221972000").mul(-1),
+      BN.from("089194887103685600"),
+      BN.from("162518488572285000").mul(-1),
+      BN.from("516451225277333000"),
+      BN.from("118180213813597000"),
+      BN.from("261748715887528000").mul(-1),
+    ]
+
+    const boundParameters: MetalogBoundParameters = {
+      boundChoice: MetalogBoundChoice.UNBOUNDED,
+      lowerBound: ZERO,
+      upperBound: ZERO,
+    }
+
+    it("should revert for p < 0%", async function () {
+      const PERCENTILE = ZERO.sub(1);
+      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith('percentile_ <= 0%');
+    });
+
+    it("should revert for p = 0%", async function () {
+      const PERCENTILE = ZERO;
+      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith('percentile_ <= 0%');
+    });
+
+    it("should revert for p = 100%", async function () {
+      const PERCENTILE = ONE;
+      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith('percentile_ >= 100%');
+    });
+
+    it("should revert for p > 100%", async function () {
+      const PERCENTILE = ONE.add(1);
+      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith('percentile_ >= 100%');
+    });
+
+    it("p = 0.001", async function () {
+      const PERCENTILE = ONE.div(1000);
+      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("918136864905447000"), 1)
+    });
+
+    it("p = 0.01", async function () {
+      const PERCENTILE = ONE.div(100);
+      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("948683175129611000"), 1)
+    });
+
+    it("p = 0.1", async function () {
+      const PERCENTILE = ONE.div(10);
+      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("969541856156500000"), 1)
+    });
+
+    it("p = 0.25", async function () {
+      const PERCENTILE = ONE.div(4);
+      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("984075048361894000"), 1)
+    });
+
+    it("p = 0.5", async function () {
+      const PERCENTILE = HALF;
+      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("996043875467933000"), 1)
+    });
+
+    it("p = 0.75", async function () {
+      const PERCENTILE = ONE.mul(3).div(4);
+      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("999014961031336000"), 1)
+    });
+
+    it("p = 0.9", async function () {
+      const PERCENTILE = ONE.mul(9).div(10);
+      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("1000013855209570000"), 1)
+    });
+
+    it("p = 0.99", async function () {
+      const PERCENTILE = ONE.mul(99).div(100);
+      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("1002172587132820000"), 1)
+    });
   });
 
-  // describe("Withdrawals", function () {
-  //   describe("Validations", function () {
-  //     it("Should revert with the right error if called too soon", async function () {
-  //       const { lock } = await loadFixture(deployOneYearLockFixture);
-
-  //       await expect(lock.withdraw()).to.be.revertedWith(
-  //         "You can't withdraw yet"
-  //       );
-  //     });
-
-  //     it("Should revert with the right error if called from another account", async function () {
-  //       const { lock, unlockTime, otherAccount } = await loadFixture(
-  //         deployOneYearLockFixture
-  //       );
-
-  //       // We can increase the time in Hardhat Network
-  //       await time.increaseTo(unlockTime);
-
-  //       // We use lock.connect() to send a transaction from another account
-  //       await expect(lock.connect(otherAccount).withdraw()).to.be.revertedWith(
-  //         "You aren't the owner"
-  //       );
-  //     });
-
-  //     it("Shouldn't fail if the unlockTime has arrived and the owner calls it", async function () {
-  //       const { lock, unlockTime } = await loadFixture(
-  //         deployOneYearLockFixture
-  //       );
-
-  //       // Transactions are sent using the first signer by default
-  //       await time.increaseTo(unlockTime);
-
-  //       await expect(lock.withdraw()).not.to.be.reverted;
-  //     });
-  //   });
-
-  //   describe("Events", function () {
-  //     it("Should emit an event on withdrawals", async function () {
-  //       const { lock, unlockTime, lockedAmount } = await loadFixture(
-  //         deployOneYearLockFixture
-  //       );
-
-  //       await time.increaseTo(unlockTime);
-
-  //       await expect(lock.withdraw())
-  //         .to.emit(lock, "Withdrawal")
-  //         .withArgs(lockedAmount, anyValue); // We accept any value as `when` arg
-  //     });
-  //   });
-
-  //   describe("Transfers", function () {
-  //     it("Should transfer the funds to the owner", async function () {
-  //       const { lock, unlockTime, lockedAmount, owner } = await loadFixture(
-  //         deployOneYearLockFixture
-  //       );
-
-  //       await time.increaseTo(unlockTime);
-
-  //       await expect(lock.withdraw()).to.changeEtherBalances(
-  //         [owner, lock],
-  //         [lockedAmount, -lockedAmount]
-  //       );
-  //     });
-  //   });
-  // });
 });
 
 function expectWithinErrorBPS(actual: BN, expected: BN, tolerated_error_bps: number) {

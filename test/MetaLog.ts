@@ -37,7 +37,7 @@ describe('MetaLog', function () {
       expect(await test.mul(ONE, ONE)).eq(ONE);
       expect(await test.mul(ONE, TWO)).eq(TWO);
       expect(await test.mul(ONE, HALF)).eq(HALF);
-      expect(await test.mul(FOUR, HALF)).eq(TWO);
+      expect(await test.mul(FOUR, -HALF)).eq(TWO);
     });
 
     it('div', async function () {

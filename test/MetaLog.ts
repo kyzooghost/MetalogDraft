@@ -27,7 +27,7 @@ describe('MetaLog', function () {
     UNBOUNDED,
     BOUNDED_BELOW,
     BOUNDED_ABOVE,
-    BOUNDED
+    BOUNDED,
   }
 
   interface MetalogBoundParameters {
@@ -80,7 +80,7 @@ describe('MetaLog', function () {
     it('ln', async function () {
       expect(await test.ln(ONE)).eq(ZERO);
       expectWithinErrorBPS(await test.ln(e), ONE, 1);
-      expectWithinErrorBPS(await test.ln(EIGHT), BN.from("2079441541679835928"), 1);
+      expectWithinErrorBPS(await test.ln(EIGHT), BN.from('2079441541679835928'), 1);
     });
 
     it('pow', async function () {
@@ -93,91 +93,162 @@ describe('MetaLog', function () {
     });
   });
 
-  describe('Nine-term unbounded metalog quantile function', function () {
+  describe('Nine-term unbounded metalog getQuantile', function () {
     const COEFFICIENTS: BN[] = [
-      BN.from("996043875471054000"),
-      BN.from("051024209692504000"),
-      BN.from("040340911286869100").mul(-1),
-      BN.from("181985469221972000").mul(-1),
-      BN.from("089194887103685600"),
-      BN.from("162518488572285000").mul(-1),
-      BN.from("516451225277333000"),
-      BN.from("118180213813597000"),
-      BN.from("261748715887528000").mul(-1),
-    ]
+      BN.from('996043875471054000'),
+      BN.from('051024209692504000'),
+      BN.from('040340911286869100').mul(-1),
+      BN.from('181985469221972000').mul(-1),
+      BN.from('089194887103685600'),
+      BN.from('162518488572285000').mul(-1),
+      BN.from('516451225277333000'),
+      BN.from('118180213813597000'),
+      BN.from('261748715887528000').mul(-1),
+    ];
 
     const boundParameters: MetalogBoundParameters = {
       boundChoice: MetalogBoundChoice.UNBOUNDED,
       lowerBound: ZERO,
       upperBound: ZERO,
-    }
+    };
 
-    it("should revert for p < 0%", async function () {
+    it('should revert for p < 0%', async function () {
       const PERCENTILE = ZERO.sub(1);
-      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith('percentile_ <= 0%');
+      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith(
+        'percentile_ <= 0%'
+      );
     });
 
-    it("should revert for p = 0%", async function () {
+    it('should revert for p = 0%', async function () {
       const PERCENTILE = ZERO;
-      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith('percentile_ <= 0%');
+      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith(
+        'percentile_ <= 0%'
+      );
     });
 
-    it("should revert for p = 100%", async function () {
+    it('should revert for p = 100%', async function () {
       const PERCENTILE = ONE;
-      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith('percentile_ >= 100%');
+      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith(
+        'percentile_ >= 100%'
+      );
     });
 
-    it("should revert for p > 100%", async function () {
+    it('should revert for p > 100%', async function () {
       const PERCENTILE = ONE.add(1);
-      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith('percentile_ >= 100%');
+      await expect(metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters)).to.be.revertedWith(
+        'percentile_ >= 100%'
+      );
     });
 
-    it("p = 0.001", async function () {
+    it('p = 0.001', async function () {
       const PERCENTILE = ONE.div(1000);
-      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("918136864905447000"), 1)
+      expectWithinErrorBPS(
+        await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters),
+        BN.from('918136864905447000'),
+        1
+      );
     });
 
-    it("p = 0.01", async function () {
+    it('p = 0.01', async function () {
       const PERCENTILE = ONE.div(100);
-      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("948683175129611000"), 1)
+      expectWithinErrorBPS(
+        await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters),
+        BN.from('948683175129611000'),
+        1
+      );
     });
 
-    it("p = 0.1", async function () {
+    it('p = 0.1', async function () {
       const PERCENTILE = ONE.div(10);
-      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("969541856156500000"), 1)
+      expectWithinErrorBPS(
+        await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters),
+        BN.from('969541856156500000'),
+        1
+      );
     });
 
-    it("p = 0.25", async function () {
+    it('p = 0.25', async function () {
       const PERCENTILE = ONE.div(4);
-      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("984075048361894000"), 1)
+      expectWithinErrorBPS(
+        await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters),
+        BN.from('984075048361894000'),
+        1
+      );
     });
 
-    it("p = 0.5", async function () {
+    it('p = 0.5', async function () {
       const PERCENTILE = HALF;
-      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("996043875467933000"), 1)
+      expectWithinErrorBPS(
+        await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters),
+        BN.from('996043875467933000'),
+        1
+      );
     });
 
-    it("p = 0.75", async function () {
+    it('p = 0.75', async function () {
       const PERCENTILE = ONE.mul(3).div(4);
-      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("999014961031336000"), 1)
+      expectWithinErrorBPS(
+        await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters),
+        BN.from('999014961031336000'),
+        1
+      );
     });
 
-    it("p = 0.9", async function () {
+    it('p = 0.9', async function () {
       const PERCENTILE = ONE.mul(9).div(10);
-      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("1000013855209570000"), 1)
+      expectWithinErrorBPS(
+        await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters),
+        BN.from('1000013855209570000'),
+        1
+      );
     });
 
-    it("p = 0.99", async function () {
+    it('p = 0.99', async function () {
       const PERCENTILE = ONE.mul(99).div(100);
-      expectWithinErrorBPS(await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters), BN.from("1002172587132820000"), 1)
+      expectWithinErrorBPS(
+        await metaLog.getQuantile(PERCENTILE, COEFFICIENTS, boundParameters),
+        BN.from('1002172587132820000'),
+        1
+      );
     });
   });
 
+  describe('Nine-term unbounded metalog getApproximatePercentile', function () {
+    const COEFFICIENTS: BN[] = [
+      BN.from('996043875471054000'),
+      BN.from('051024209692504000'),
+      BN.from('040340911286869100').mul(-1),
+      BN.from('181985469221972000').mul(-1),
+      BN.from('089194887103685600'),
+      BN.from('162518488572285000').mul(-1),
+      BN.from('516451225277333000'),
+      BN.from('118180213813597000'),
+      BN.from('261748715887528000').mul(-1),
+    ];
+
+    const boundParameters: MetalogBoundParameters = {
+      boundChoice: MetalogBoundChoice.UNBOUNDED,
+      lowerBound: ZERO,
+      upperBound: ZERO,
+    };
+
+    it('p = 0.75', async function () {
+      const QUANTILE = BN.from('948683175129611000');
+      console.log(await metaLog.getApproximatePercentile(QUANTILE, COEFFICIENTS, boundParameters));
+    });
+
+    // it('p = 0.5', async function () {
+    //   const QUANTILE = BN.from('996043875467933000');
+    //   console.log(await metaLog.getApproximatePercentile(QUANTILE, COEFFICIENTS, boundParameters));
+    // });
+  });
 });
 
 function expectWithinErrorBPS(actual: BN, expected: BN, tolerated_error_bps: number) {
   const difference = expected.gt(actual) ? expected.sub(actual) : actual.sub(expected);
-  if (difference.eq(0)) {return;}
+  if (difference.eq(0)) {
+    return;
+  }
   const error_percentile_inverse = expected.div(difference);
 
   if (!error_percentile_inverse.gte(10000 / tolerated_error_bps)) {

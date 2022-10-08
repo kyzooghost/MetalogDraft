@@ -20,6 +20,8 @@ contract MetaLog {
     int256 constant internal ONE = 1e18;
     int256 constant internal TWO = 2e18;
     int256 constant internal THREE = 3e18;
+    int256 constant internal FIVE = 5e18;
+
 
     enum MetalogBoundChoice {
         UNBOUNDED,
@@ -60,11 +62,8 @@ contract MetaLog {
     function getApproximatePercentile(
         int256 quantile_, 
         int256[] calldata coefficients_, 
-        MetalogBoundParameters calldata bound_, 
-        int256 iterations_, 
-        int256 startingPoint_
+        MetalogBoundParameters calldata bound_ 
     ) external view returns (int256 approximatePercentile) {
-        require(startingPoint_ <= 1e18, "startingPoint_ > 100%");
         return _getApproximatePercentile(quantile_, coefficients_, bound_);
     }
 
@@ -176,28 +175,37 @@ contract MetaLog {
         int256[] calldata coefficients_, 
         MetalogBoundParameters calldata bound_
     ) internal view returns (int256 approximatePercentile) {
-        int256 accepted_error = 10e11;
-        int256 current_error;
+        uint256 gas = gasleft();
+        // Stop while-loop when gaining less than 0.01% accuracy with each iteration.
+        int256 accepted_error = 1e14;
+        int256 current_error = 1e18;
         int256 loop_count = 0;
 
         // Start at 50% percentile
         approximatePercentile = 5e17; 
 
-        while (current_error > accepted_error && loop_count < 1000) {
+        while (current_error > accepted_error && loop_count < 100) {
             int256 getQuantileResult = _getQuantile(approximatePercentile, coefficients_, bound_);
 
             int newApproximatePercentile = approximatePercentile 
             - (getQuantileResult - quantile_)
-            .div(_getQuantileDerivative(approximatePercentile, coefficients_, bound_, getQuantileResult));
+            .div(_getQuantileDerivative(approximatePercentile, coefficients_, bound_, getQuantileResult))
+            .div(FIVE);
 
             current_error = (newApproximatePercentile - approximatePercentile).abs();
             approximatePercentile = newApproximatePercentile;
+            console.log("newApproximatePercentile");
+            console.logInt(approximatePercentile);
             loop_count += 1;
+            console.log("loop_count");
+            console.logInt(loop_count);
         }
 
         if (loop_count >= 100) {
             revert('Unable to find approximate percentile');
         }
+
+        console.log("gas used: %d", gas - gasleft());
     }
 
     /**
@@ -218,6 +226,8 @@ contract MetaLog {
         unboundedQuantileDerivative = 0;
 
         for (uint256 i = 0; i < coefficients_.length; i++) {
+            // console.log("Term %d", i + 1);
+            // console.logInt(_getQuantileDerivativeFunctionTerm(percentile_, int256(i) + 1));
             unboundedQuantileDerivative += coefficients_[i].mul(_getQuantileDerivativeFunctionTerm(percentile_, int256(i) + 1));
         }
 
@@ -239,6 +249,7 @@ contract MetaLog {
     /**
      * @notice Internal helper function to obtain individual terms for the derivative of the metalog quantile function.
      * @dev Using https://www.derivative-calculator.net/
+     * @dev Compare to https://github.com/kimsergeo/metalog/blob/851a75d7afd66a584c68543e7031a588cf50ea84/metalog/support_func.py#L53-L101.
      * @param percentile_ Percentile that we desire to find the quantile (1e18 => 100th percentile, 5e17 => 50th percentile)
      * @param term_ Which term we want to find, i.e. `term_ == 1` means we want to find the first term.
      */
